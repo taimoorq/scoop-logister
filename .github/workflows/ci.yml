@@ -14,6 +14,9 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Check public repository safety
+        shell: bash
+        run: scripts/publication-safety-check.sh
       - name: Validate manifests
         shell: pwsh
         run: |
@@ -30,5 +33,21 @@ jobs:
             $actual = (Get-FileHash $archive -Algorithm SHA256).Hash.ToLowerInvariant()
             if ($actual -ne $manifest.hash) {
               throw "Hash mismatch for $($_.Name): expected $($manifest.hash), got $actual"
+            }
+
+            $extractRoot = Join-Path $env:RUNNER_TEMP "logister-$($manifest.version)"
+            New-Item -ItemType Directory -Force -Path $extractRoot | Out-Null
+            tar -xzf $archive -C $extractRoot
+            $installRoot = Join-Path $extractRoot $manifest.extract_dir
+            $directVersion = (& node (Join-Path $installRoot "bin/logister.js") version | Select-String '^version\s+' | ForEach-Object { ($_ -split '\s+')[1] })
+            if ($directVersion -ne $manifest.version) {
+              throw "Extracted CLI version mismatch: expected $($manifest.version), got $directVersion"
+            }
+
+            $dir = $installRoot
+            Invoke-Command ([scriptblock]::Create($manifest.installer.script -join "`r`n"))
+            $wrapperVersion = (& (Join-Path $dir "logister.cmd") version | Select-String '^version\s+' | ForEach-Object { ($_ -split '\s+')[1] })
+            if ($wrapperVersion -ne $manifest.version) {
+              throw "Scoop wrapper version mismatch: expected $($manifest.version), got $wrapperVersion"
             }
           }

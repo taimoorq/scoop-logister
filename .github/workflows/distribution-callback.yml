@@ -1,0 +1,42 @@
+name: Distribution callback
+
+on:
+  workflow_run:
+    workflows:
+      - CI
+    branches:
+      - main
+    types:
+      - completed
+
+permissions:
+  contents: read
+
+concurrency:
+  group: distribution-callback
+  cancel-in-progress: false
+
+jobs:
+  notify:
+    if: github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+      - name: Notify CLI release reconciler
+        env:
+          GH_TOKEN: ${{ secrets.CLI_RELEASE_CALLBACK_TOKEN }}
+          VERIFIED_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          test -n "${GH_TOKEN:-}"
+          version="$(jq -r .version bucket/logister.json)"
+          sha256="$(jq -r .hash bucket/logister.json)"
+          test -n "$version"
+          test -n "$sha256"
+          gh api --method POST repos/taimoorq/logister-cli/dispatches \
+            -f event_type=distribution-published \
+            -f "client_payload[channel]=scoop" \
+            -f "client_payload[version]=$version" \
+            -f "client_payload[sha256]=$sha256" \
+            -f "client_payload[metadata_sha]=$VERIFIED_SHA"
