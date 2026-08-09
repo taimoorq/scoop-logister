@@ -38,14 +38,14 @@ jobs:
             $extractRoot = Join-Path $env:RUNNER_TEMP "logister-$($manifest.version)"
             New-Item -ItemType Directory -Force -Path $extractRoot | Out-Null
             tar -xzf $archive -C $extractRoot
-            $packageRoot = Join-Path $extractRoot $manifest.extract_dir
-            $directVersion = (& node (Join-Path $packageRoot "bin/logister.js") version | Select-String '^version\s+' | ForEach-Object { ($_ -split '\s+')[1] })
+            $installRoot = Join-Path $extractRoot $manifest.extract_dir
+            $directVersion = (& node (Join-Path $installRoot "bin/logister.js") version | Select-String '^version\s+' | ForEach-Object { ($_ -split '\s+')[1] })
             if ($directVersion -ne $manifest.version) {
               throw "Extracted CLI version mismatch: expected $($manifest.version), got $directVersion"
             }
 
-            $dir = $extractRoot
-            $manifest.installer.script | ForEach-Object { Invoke-Expression $_ }
+            $dir = $installRoot
+            Invoke-Command ([scriptblock]::Create($manifest.installer.script -join "`r`n"))
             $wrapperVersion = (& (Join-Path $dir "logister.cmd") version | Select-String '^version\s+' | ForEach-Object { ($_ -split '\s+')[1] })
             if ($wrapperVersion -ne $manifest.version) {
               throw "Scoop wrapper version mismatch: expected $($manifest.version), got $wrapperVersion"
