@@ -1,12 +1,23 @@
 #!/usr/bin/env node
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 
 const args = parseArgs(process.argv.slice(2));
 const version = required(args.version, "--version");
 const sha256 = required(args.sha256, "--sha256");
-const url = args.url || `https://registry.npmjs.org/logister-cli/-/logister-cli-${version}.tgz`;
+const canonicalUrl = `https://registry.npmjs.org/logister-cli/-/logister-cli-${version}.tgz`;
+const url = args.url || canonicalUrl;
 const output = resolve(args.output || "bucket/logister.json");
+
+if (!/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(version)) fail(`Invalid --version: ${version}`);
+if (!/^[a-f0-9]{64}$/.test(sha256)) fail("--sha256 must be 64 lowercase hex characters");
+if (url !== canonicalUrl) fail(`--url must be ${canonicalUrl}`);
+
+// The installer script is executed by CI, which requires it to match this template exactly.
+const installerScript = readFileSync(new URL("./scoop-installer.ps1", import.meta.url), "utf8")
+  .replace(/\r\n/g, "\n")
+  .replace(/\n$/, "")
+  .split("\n");
 
 const manifest = {
   version,
@@ -18,14 +29,7 @@ const manifest = {
   hash: sha256,
   extract_dir: "package",
   installer: {
-    script: [
-      "$cmd = @(",
-      "    '@echo off',",
-      "    'set LOGISTER_INSTALL_SOURCE=scoop',",
-      "    'node \"%~dp0bin\\logister.js\" %*'",
-      ")",
-      "Set-Content \"$dir\\logister.cmd\" ($cmd -join \"`r`n\") -Encoding ASCII"
-    ]
+    script: installerScript
   },
   bin: [["logister.cmd", "logister"]],
   checkver: {
@@ -55,9 +59,11 @@ function parseArgs(argv) {
 }
 
 function required(value, name) {
-  if (!value) {
-    process.stderr.write(`Missing ${name}\n`);
-    process.exit(2);
-  }
+  if (!value) fail(`Missing ${name}`);
   return value;
+}
+
+function fail(message) {
+  process.stderr.write(`${message}\n`);
+  process.exit(2);
 }

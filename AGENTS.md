@@ -14,6 +14,9 @@ package manager state.
   `logister-cli` repository; it updates Homebrew and Scoop from one npm tarball.
 - Preserve `LOGISTER_INSTALL_SOURCE=scoop`, `extract_dir`, command-wrapper
   quoting, `checkver`, and `autoupdate` behavior.
+- `installer.script` must equal `scripts/scoop-installer.ps1` line for line; CI
+  fails on any mismatch before running it. Change the template, then rerun the
+  updater, never the manifest alone.
 - Keep GitHub Actions Dependabot enabled and pin Actions to full commit SHAs.
 
 ## Verification

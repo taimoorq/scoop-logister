@@ -23,9 +23,35 @@ jobs:
           Get-ChildItem bucket -Filter *.json | ForEach-Object {
             Get-Content $_.FullName -Raw | ConvertFrom-Json | Out-Null
           }
+      - name: Check manifests against canonical template
+        shell: pwsh
+        run: |
+          $template = ((Get-Content scripts/scoop-installer.ps1 -Raw) -replace "`r`n", "`n").TrimEnd("`n")
+          Get-ChildItem bucket -Filter *.json | ForEach-Object {
+            $manifest = Get-Content $_.FullName -Raw | ConvertFrom-Json
+            $installer = (@($manifest.installer.script) -join "`n")
+            if ($installer -cne $template) {
+              throw "$($_.Name): installer.script does not match scripts/scoop-installer.ps1"
+            }
+            if ($manifest.version -cnotmatch '^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$') {
+              throw "$($_.Name): invalid version $($manifest.version)"
+            }
+            $canonicalUrl = "https://registry.npmjs.org/logister-cli/-/logister-cli-$($manifest.version).tgz"
+            if ($manifest.url -cne $canonicalUrl) {
+              throw "$($_.Name): url must be $canonicalUrl"
+            }
+            if ($manifest.hash -cnotmatch '^[a-f0-9]{64}$') {
+              throw "$($_.Name): hash must be 64 lowercase hex characters"
+            }
+            if ($manifest.extract_dir -cne 'package') {
+              throw "$($_.Name): extract_dir must be package"
+            }
+          }
       - name: Verify package hashes
         shell: pwsh
         run: |
+          # Run the checked-in template, which the previous step proved equal to installer.script.
+          $installerScript = Get-Content scripts/scoop-installer.ps1 -Raw
           Get-ChildItem bucket -Filter *.json | ForEach-Object {
             $manifest = Get-Content $_.FullName -Raw | ConvertFrom-Json
             $archive = Join-Path $env:RUNNER_TEMP "$($manifest.version).tgz"
@@ -45,7 +71,7 @@ jobs:
             }
 
             $dir = $installRoot
-            Invoke-Command ([scriptblock]::Create($manifest.installer.script -join "`r`n"))
+            Invoke-Command ([scriptblock]::Create($installerScript))
             $wrapperVersion = (& (Join-Path $dir "logister.cmd") version | Select-String '^version\s+' | ForEach-Object { ($_ -split '\s+')[1] })
             if ($wrapperVersion -ne $manifest.version) {
               throw "Scoop wrapper version mismatch: expected $($manifest.version), got $wrapperVersion"

@@ -58,7 +58,10 @@ node scripts/update-manifest.mjs \
 ```
 
 The manifest must use the same version and checksum as the npm registry tarball
-`https://registry.npmjs.org/logister-cli/-/logister-cli-X.Y.Z.tgz`.
+`https://registry.npmjs.org/logister-cli/-/logister-cli-X.Y.Z.tgz`. The updater
+rejects any other `--url`, a `--sha256` that is not 64 lowercase hex characters,
+and copies `installer.script` from `scripts/scoop-installer.ps1`, which CI
+requires the manifest to match exactly.
 
 Validate the manifest in PowerShell before opening or merging a pull request:
 
